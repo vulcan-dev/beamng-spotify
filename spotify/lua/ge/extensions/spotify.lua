@@ -64,10 +64,28 @@ local function previous_song()
 end
 
 local function play_song()
-    local url = "http://localhost:8888/play_song"
+    local body = jsonEncode({
+        offset = {
+            position = 0
+        },
+        position_ms = 0
+    })
+
+    local url = "http://localhost:8888/api/v1/play_song"
+    local respbody = {}
     http.request {
         url = url,
         method = "POST",
+        source = ltn12.source.string(body),
+        headers = {
+            ["Accept"] = "*/*",
+            ["Content-Type"] = "application/json",
+            ["Content-Length"] = #body,
+            ["User-Agent"] = "BeamNG",
+            ["Connection"] = "keep-alive",
+            ["Accept-Encoding"] = "gzip, deflate, br"
+        },
+        sink = ltn12.sink.table(respbody),
     }
 end
 
@@ -155,6 +173,17 @@ local function onUpdate()
             local progress_width = imgui.GetItemRectSize().x
             local time_ms = math.floor((mouse_x - progress_x) / progress_width * duration_ms)
             seek(time_ms)
+        end
+
+        imgui.SameLine()
+        if song.is_playing then
+            if imgui.Button("Pause") then
+                pause_song()
+            end
+        else
+            if imgui.Button("Play") then
+                play_song()
+            end
         end
 
         -- volume
