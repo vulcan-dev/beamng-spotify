@@ -131,7 +131,20 @@ async fn spotify_seek(position_ms: web::Path<u32>) -> impl Responder {
 
     let mins: i64 = position_ms_i64 / 1000 / 60;
     let secs: i64 = (position_ms_i64 / 1000) % 60;
-    let time = format!("{}:{}", mins, secs);
+
+    let min_str = if mins < 10 {
+        format!("0{}", mins)
+    } else {
+        format!("{}", mins)
+    };
+
+    let sec_str = if secs < 10 {
+        format!("0{}", secs)
+    } else {
+        format!("{}", secs)
+    };
+
+    let time = format!("{}:{}", min_str, sec_str);
 
     info!("Set time to: {}", time);
 
