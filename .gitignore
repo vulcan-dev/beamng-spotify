@@ -1,0 +1,4 @@
+client/target/
+client/Cargo.lock
+.env
+*.json
