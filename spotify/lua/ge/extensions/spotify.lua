@@ -41,14 +41,7 @@ local function get_active_device()
         attempts = 0
     end
 
-    local json = jsonDecode(body)
-    if json and json.device then
-        volume = imgui.IntPtr(json.device.volume_percent)
-    else
-        log("W", "get_active_device", "failed to get active device")
-    end
-
-    return json
+    return jsonDecode(body)
 end
 
 local function next_song()
@@ -123,6 +116,7 @@ local function set_volume(volume)
 end
 
 local lastUpdate = 0
+local volumeUpdate = 0
 local function onUpdate()
     if attempts >= max_attempts then
         connected = false
@@ -142,6 +136,15 @@ local function onUpdate()
         lastUpdate = now
         current_song = get_song()
         active_device = get_active_device()
+    end
+
+    if os.clock() - volumeUpdate > 2 then
+        volumeUpdate = now
+        if active_device and active_device.device then
+            volume = imgui.IntPtr(active_device.device.volume_percent)
+        else
+            log("W", "get_active_device", "failed to get active device")
+        end
     end
 
     if imgui.Begin("Spotify Controller") then
