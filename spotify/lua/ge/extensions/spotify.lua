@@ -6,6 +6,7 @@ http.TIMEOUT = 0.1
 local imgui = ui_imgui
 
 local connected = true
+local old_connected = true
 local current_song = {}
 local active_device = {}
 
@@ -18,16 +19,10 @@ local function get_song()
 
     if not body then
         attempts = attempts + 1
-
-        if attempts == max_attempts then
-            log("E", "get_song", "max attempts reached, please run \"spotify.reconnect()\"")
-
-            connected = false
-            current_song = {}
-            active_device = {}
-        end
-
         return nil
+    else
+        connected = true
+        attempts = 0
     end
 
     return jsonDecode(body)
@@ -37,7 +32,11 @@ local function get_active_device()
     local body = http.request("http://localhost:8888/api/v1/active_device")
 
     if not body then
+        attempts = attempts + 1
         return nil
+    else
+        connected = true
+        attempts = 0
     end
 
     local json = jsonDecode(body)
@@ -101,6 +100,17 @@ end
 
 local lastUpdate = 0
 local function onUpdate()
+    if attempts >= max_attempts then
+        connected = false
+        current_song = {}
+        active_device = {}
+
+        if not connected and old_connected then
+            log("E", "onUpdate", "failed to connect to spotify")
+            old_connected = false
+        end
+    end
+    
     if not connected then return end
 
     local now = os.clock()
@@ -157,6 +167,7 @@ local function onUpdate()
 end
 
 local function reconnect()
+    attempts = 0
     connected = true
 end
 
