@@ -166,14 +166,8 @@ Steps:
                     });
 
                     let file_json: song::Song = serde_json::from_str(&file_str).unwrap_or_else(|e| {
-                        panic!("Error parsing song.json: {}", e.to_string())
+                        panic!("Error parsing song.json: {}", e.to_string());
                     });
-                    
-                    if let (Some(item1), Some(item2)) = (json.clone().item, file_json.clone().item) {
-                        if item1.name != item2.name {
-                            info!("Song changed to {}", item1.name);
-                        }
-                    }
 
                     if json.progress_ms != file_json.progress_ms || json.is_playing != file_json.is_playing {
                         let mut file = File::create("song.json").unwrap_or_else(|e| {
@@ -184,7 +178,13 @@ Steps:
                             panic!("Error writing to song.json: {}", e.to_string())
                         }).as_bytes()).unwrap_or_else(|e| {
                             panic!("Error writing to song.json: {}", e.to_string())
-                        });   
+                        });
+
+                        if let (Some(item1), Some(item2)) = (json.clone().item, file_json.clone().item) {
+                            if item1.name != item2.name {
+                                info!("Song changed to \"{}\"", item1.name);
+                            }
+                        }
                     }
                 }
             }
@@ -193,7 +193,7 @@ Steps:
         }
     });
 
-    let task_server = HttpServer::new(|| {
+    HttpServer::new(|| {
         App::new()
             .service(callback)
             .service(login)
@@ -205,13 +205,9 @@ Steps:
             .service(spotify::spotify_seek)
             .service(spotify::spotify_volume)
             .service(spotify::active_device)
-    });
-
-    use std::net::SocketAddr;
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8888));
-    task_server.bind(addr).unwrap_or_else(|e| {
-        panic!("Error binding to {}: {}", addr, e);
+    }).workers(2).bind("localhost:8888").unwrap_or_else(|e| {
+        panic!("Failed to bind to localhost:8888: {}", e.to_string())
     }).run().await.unwrap_or_else(|e| {
-        panic!("Error running server: {}", e);
+        panic!("Failed to run server: {}", e.to_string())
     });
 }
