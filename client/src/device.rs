@@ -13,20 +13,13 @@ pub struct Device {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SpotifyDevice {
-    pub device: Device,
+    pub device: Option<Device>,
 }
 
 impl Default for SpotifyDevice {
     fn default() -> Self {
         SpotifyDevice {
-            device: Device {
-                id: "".to_string(),
-                is_active: false,
-                is_private_session: false,
-                name: "".to_string(),
-                type_: "".to_string(),
-                volume_percent: 0,
-            },
+            device: None,
         }
     }
 }
