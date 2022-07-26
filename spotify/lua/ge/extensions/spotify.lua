@@ -10,15 +10,23 @@ local current_song = {}
 local active_device = {}
 
 local volume = imgui.IntPtr(0)
+local attempts = 0
+local max_attempts = 4
 
 local function get_song()
     local body = http.request("http://localhost:8888/api/v1/current_song")
 
     if not body then
-        log("E", "get_song", "failed to get song, run \"spotify.reconnect() to try again\"")
-        connected = false
-        current_song = {}
-        active_device = {}
+        attempts = attempts + 1
+
+        if attempts == max_attempts then
+            log("E", "get_song", "max attempts reached, please run \"spotify.reconnect()\"")
+
+            connected = false
+            current_song = {}
+            active_device = {}
+        end
+
         return nil
     end
 
@@ -29,7 +37,6 @@ local function get_active_device()
     local body = http.request("http://localhost:8888/api/v1/active_device")
 
     if not body then
-        log("E", "get_active_device", "failed to get active device")
         return nil
     end
 
