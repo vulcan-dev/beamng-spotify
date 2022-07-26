@@ -67,7 +67,7 @@ async fn previous_song() -> impl Responder {
 }
 
 #[post("/api/v1/play_song")]
-async fn spotify_play(body: web::Json<SpotifyPlay>) -> impl Responder {
+async fn play(body: web::Json<SpotifyPlay>) -> impl Responder {
     let access_token = client::get_access_token().await;
     if access_token.is_empty() {
         return HttpResponse::Ok().body("No access token");
@@ -88,7 +88,7 @@ async fn spotify_play(body: web::Json<SpotifyPlay>) -> impl Responder {
 }
 
 #[post("/api/v1/pause_song")]
-async fn spotify_pause() -> impl Responder {
+async fn pause() -> impl Responder {
     let access_token = client::get_access_token().await;
     if access_token.is_empty() {
         return HttpResponse::Ok().body("No access token");
@@ -109,7 +109,7 @@ async fn spotify_pause() -> impl Responder {
 }
 
 #[post("/api/v1/seek/{position_ms}")]
-async fn spotify_seek(position_ms: web::Path<u32>) -> impl Responder {
+async fn seek(position_ms: web::Path<u32>) -> impl Responder {
     let access_token = client::get_access_token().await;
     if access_token.is_empty() {
         return HttpResponse::Ok().body("No access token");
@@ -152,7 +152,7 @@ async fn spotify_seek(position_ms: web::Path<u32>) -> impl Responder {
 }
 
 #[post("/api/v1/volume/{volume}")]
-async fn spotify_volume(volume: web::Path<u32>) -> impl Responder {
+async fn volume(volume: web::Path<u32>) -> impl Responder {
     let access_token = client::get_access_token().await;
     if access_token.is_empty() {
         return HttpResponse::Ok().body("No access token");
@@ -173,6 +173,63 @@ async fn spotify_volume(volume: web::Path<u32>) -> impl Responder {
     info!("Set volume to: {}", volume);
 
     HttpResponse::Ok().finish()
+}
+
+#[get("/api/v1/playlists")]
+async fn playlists() -> impl Responder {
+    let access_token = client::get_access_token().await;
+    if access_token.is_empty() {
+        return HttpResponse::Ok().body("No access token");
+    }
+
+    let client = Client::builder()
+        .user_agent("BeamNG-Spotify")
+        .build().unwrap();
+
+    let response = client
+        .get("https://api.spotify.com/v1/me/playlists")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send().await.unwrap();
+
+    HttpResponse::Ok().body(response.text().await.unwrap())
+}
+
+#[get("/api/v1/albums")]
+async fn albums() -> impl Responder {
+    let access_token = client::get_access_token().await;
+    if access_token.is_empty() {
+        return HttpResponse::Ok().body("No access token");
+    }
+
+    let client = Client::builder()
+        .user_agent("BeamNG-Spotify")
+        .build().unwrap();
+
+    let response = client
+        .get("https://api.spotify.com/v1/me/albums")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send().await.unwrap();
+
+    HttpResponse::Ok().body(response.text().await.unwrap())
+}
+
+#[get("/api/v1/tracks")]
+async fn tracks() -> impl Responder {
+    let access_token = client::get_access_token().await;
+    if access_token.is_empty() {
+        return HttpResponse::Ok().body("No access token");
+    }
+
+    let client = Client::builder()
+        .user_agent("BeamNG-Spotify")
+        .build().unwrap();
+
+    let response = client
+        .get("https://api.spotify.com/v1/me/tracks")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send().await.unwrap();
+
+    HttpResponse::Ok().body(response.text().await.unwrap())
 }
 
 #[get("/api/v1/active_device")]

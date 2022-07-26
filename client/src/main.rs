@@ -23,7 +23,7 @@ pub struct AuthRequest {
 
 #[get("/login")]
 async fn login() -> impl Responder {
-    let scope = String::from("user-read-currently-playing user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-playback-state");
+    let scope = String::from("user-read-currently-playing user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-playback-state user-library-read");
     let redirect_uri = String::from("http://localhost:8888/api/v1/callback");
     let client_id = dotenv::var("SPOTIFY_CLIENT_ID").unwrap_or_else(|_| {
         panic!("SPOTIFY_CLIENT_ID must be set in .env file")
@@ -245,11 +245,14 @@ Steps:
             .service(spotify::current_song)
             .service(spotify::next_song)
             .service(spotify::previous_song)
-            .service(spotify::spotify_play)
-            .service(spotify::spotify_pause)
-            .service(spotify::spotify_seek)
-            .service(spotify::spotify_volume)
+            .service(spotify::play)
+            .service(spotify::pause)
+            .service(spotify::seek)
+            .service(spotify::volume)
             .service(spotify::active_device)
+            .service(spotify::playlists)
+            .service(spotify::albums)
+            .service(spotify::tracks)
     }).workers(2).bind("localhost:8888").unwrap_or_else(|e| {
         panic!("Failed to bind to localhost:8888: {}", e.to_string())
     }).run().await.unwrap_or_else(|e| {
