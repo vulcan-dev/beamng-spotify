@@ -22,6 +22,7 @@ local function get_song()
         return nil
     else
         connected = true
+        old_connected = true
         attempts = 0
     end
 
@@ -36,6 +37,7 @@ local function get_active_device()
         return nil
     else
         connected = true
+        old_connected = true
         attempts = 0
     end
 
@@ -169,6 +171,7 @@ end
 local function reconnect()
     attempts = 0
     connected = true
+    old_connected = true
 end
 
 local function is_connected()
