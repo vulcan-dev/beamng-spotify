@@ -1,7 +1,10 @@
+use log::info;
 use serde::{Serialize, Deserialize};
 use reqwest::Client;
 use actix_web::{get, post, Responder, HttpResponse, web};
 use std::fs::read_to_string;
+
+use crate::device;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SpotifyOffset {
@@ -124,6 +127,14 @@ async fn spotify_seek(position_ms: web::Path<u32>) -> impl Responder {
         .header("Content-Length", "0")
         .send().await.unwrap().text().await.unwrap();
 
+    let position_ms_i64 = position_ms.into_inner() as i64;
+
+    let mins: i64 = position_ms_i64 / 1000 / 60;
+    let secs: i64 = (position_ms_i64 / 1000) % 60;
+    let time = format!("{}:{}", mins, secs);
+
+    info!("Set time to: {}", time);
+
     HttpResponse::Ok().finish()
 }
 
@@ -146,24 +157,16 @@ async fn spotify_volume(volume: web::Path<u32>) -> impl Responder {
         .header("Content-Length", "0")
         .send().await.unwrap().text().await.unwrap();
 
+    info!("Set volume to: {}", volume);
+
     HttpResponse::Ok().finish()
 }
 
 #[get("/api/v1/active_device")]
 async fn active_device() -> impl Responder {
-    let access_token = client::get_access_token().await;
-    if access_token.is_empty() {
-        return HttpResponse::Ok().body("No access token");
+    if let Some(active_device) = read_to_string("active_device.json").ok() {
+        return HttpResponse::Ok().body(active_device);
     }
 
-    let client = Client::builder()
-        .user_agent("BeamNG-Spotify")
-        .build().unwrap();
-
-    let response = client
-        .get("https://api.spotify.com/v1/me/player")
-        .header("Authorization", format!("Bearer {}", access_token))
-        .send().await.unwrap().text().await.unwrap();
-
-    HttpResponse::Ok().body(response)
+    HttpResponse::Ok().body(serde_json::to_string(&device::SpotifyDevice::default()).unwrap())
 }
