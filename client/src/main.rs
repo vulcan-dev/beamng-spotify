@@ -13,6 +13,7 @@ use std::path::Path;
 use log::{info, error};
 
 mod song;
+mod device;
 mod spotify;
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +79,99 @@ async fn callback(info: web::Query<AuthRequest>) -> impl Responder {
     HttpResponse::Ok().body("Got refresh token, you can now close the browser window and continue...")
 }
 
+async fn write_active_song(access_token: &str) {
+    let token_request = Client::new()
+        .get("https://api.spotify.com/v1/me/player/currently-playing")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("Content-Type", "application/x-www-form-urlencoded");
+
+    let token_response = token_request
+        .send().await.unwrap_or_else(|e| {
+            panic!("Failed sending request to \"https://api.spotify.com/v1/me/player/currently-playing\": {}", e)
+        }).text().await.unwrap_or_else(|e| {
+            panic!("Failed getting text response from \"https://api.spotify.com/v1/me/player/currently-playing\": {}", e)
+        });
+
+    if token_response.is_empty() {
+        return;
+    }
+
+    let result: Result<song::Song, serde_json::Error> = serde_json::from_str(&token_response);
+    if result.is_err() {
+        error!("(write_active_song) Error parsing JSON: {}\n{}", result.unwrap_err(), token_response);
+    } else {
+        let json: song::Song = serde_json::from_str(&token_response).unwrap();
+
+        if !Path::new("song.json").exists() {
+            let mut file = File::create("song.json").unwrap_or_else(|e| {
+                panic!("Error opening song.json: {}", e.to_string())
+            });
+
+            file.write_all(serde_json::to_string(&json).unwrap().as_bytes()).unwrap_or_else(|e| {
+                panic!("Error writing to song.json: {}", e.to_string())
+            });
+        } else {
+            let file_str = read_to_string("song.json").unwrap_or_else(|e| {
+                panic!("Error reading song.json: {}", e.to_string())
+            });
+
+            let file_json: song::Song = serde_json::from_str(&file_str).unwrap_or_else(|e| {
+                panic!("Error parsing song.json: {}", e.to_string());
+            });
+
+            if json.progress_ms != file_json.progress_ms || json.is_playing != file_json.is_playing {
+                let mut file = File::create("song.json").unwrap_or_else(|e| {
+                    panic!("Error opening song.json: {}", e.to_string())
+                });
+
+                file.write_all(serde_json::to_string(&json).unwrap_or_else(|e| {
+                    panic!("Error writing to song.json: {}", e.to_string())
+                }).as_bytes()).unwrap_or_else(|e| {
+                    panic!("Error writing to song.json: {}", e.to_string())
+                });
+
+                if let (Some(item1), Some(item2)) = (json.clone().item, file_json.clone().item) {
+                    if item1.name != item2.name {
+                        info!("Song changed to \"{}\"", item1.name);
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn write_active_device(access_token: &str) -> bool {
+    let client = Client::builder()
+        .user_agent("BeamNG-Spotify")
+        .build().unwrap();
+
+    let response = client
+        .get("https://api.spotify.com/v1/me/player")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send().await.unwrap().text().await.unwrap();
+
+    if response.is_empty() {
+        return false;
+    }
+
+    let result: Result<device::SpotifyDevice, serde_json::Error> = serde_json::from_str(&response);
+    if result.is_err() {
+        error!("(write_active_device) Error parsing JSON: {}\nresonse:\n{}", result.unwrap_err(), response);
+    } else {
+        let json: device::SpotifyDevice = serde_json::from_str(&response).unwrap();
+
+        let mut file = File::create("active_device.json").unwrap_or_else(|e| {
+            panic!("Error opening active_device.json: {}", e.to_string())
+        });
+    
+        file.write_all(serde_json::to_string(&json).unwrap().as_bytes()).unwrap_or_else(|e| {
+            panic!("Error writing to active_device.json: {}", e.to_string())
+        });
+    }
+
+    return true;
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
@@ -122,71 +216,22 @@ Steps:
     }
 
     let _ = tokio::spawn(async {
+        let mut device_offline = true;
+
         loop {
             let access_token = client::get_access_token().await;
             if access_token.is_empty() {
                 return;
             }
         
-            let token_request = Client::new()
-                .get("https://api.spotify.com/v1/me/player/currently-playing")
-                .header("Authorization", format!("Bearer {}", access_token))
-                .header("Content-Type", "application/x-www-form-urlencoded");
-        
-            let token_response = token_request
-                .send().await.unwrap_or_else(|e| {
-                    panic!("Failed sending request to \"https://api.spotify.com/v1/me/player/currently-playing\": {}", e)
-                }).text().await.unwrap_or_else(|e| {
-                    panic!("Failed getting text response from \"https://api.spotify.com/v1/me/player/currently-playing\": {}", e)
-                });
-            if token_response.is_empty() {
-                return;
-            }
-
-            let result: Result<song::Song, serde_json::Error> = serde_json::from_str(&token_response);
-            if result.is_err() {
-                error!("Error parsing JSON: {}\n{}", result.unwrap_err(), token_response);
-                return;
-            } else {
-                let json: song::Song = serde_json::from_str(&token_response).unwrap();
-            
-                use std::path::Path;
-            
-                if !Path::new("song.json").exists() {
-                    let mut file = File::create("song.json").unwrap_or_else(|e| {
-                        panic!("Error opening song.json: {}", e.to_string())
-                    });
-
-                    file.write_all(serde_json::to_string(&json).unwrap().as_bytes()).unwrap_or_else(|e| {
-                        panic!("Error writing to song.json: {}", e.to_string())
-                    });
-                } else {
-                    let file_str = read_to_string("song.json").unwrap_or_else(|e| {
-                        panic!("Error reading song.json: {}", e.to_string())
-                    });
-
-                    let file_json: song::Song = serde_json::from_str(&file_str).unwrap_or_else(|e| {
-                        panic!("Error parsing song.json: {}", e.to_string());
-                    });
-
-                    if json.progress_ms != file_json.progress_ms || json.is_playing != file_json.is_playing {
-                        let mut file = File::create("song.json").unwrap_or_else(|e| {
-                            panic!("Error opening song.json: {}", e.to_string())
-                        });
-
-                        file.write_all(serde_json::to_string(&json).unwrap_or_else(|e| {
-                            panic!("Error writing to song.json: {}", e.to_string())
-                        }).as_bytes()).unwrap_or_else(|e| {
-                            panic!("Error writing to song.json: {}", e.to_string())
-                        });
-
-                        if let (Some(item1), Some(item2)) = (json.clone().item, file_json.clone().item) {
-                            if item1.name != item2.name {
-                                info!("Song changed to \"{}\"", item1.name);
-                            }
-                        }
-                    }
-                }
+            write_active_song(&access_token).await;
+            let new_online = write_active_device(&access_token).await;
+            if !device_offline && !new_online {
+                device_offline = true;
+                info!("Device went offline");
+            } else if device_offline && new_online {
+                device_offline = false;
+                info!("Device is online");
             }
 
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
