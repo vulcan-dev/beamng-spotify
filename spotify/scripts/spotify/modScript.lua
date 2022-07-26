@@ -1,0 +1,2 @@
+load("spotify")
+registerCoreModule("spotify")
