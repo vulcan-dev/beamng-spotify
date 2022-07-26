@@ -1,6 +1,7 @@
 use reqwest::{Client};
 use serde::{Deserialize};
 use std::fs::read_to_string;
+use log::warn;
 
 #[derive(Clone, Deserialize)]
 pub struct SpotifyReturn {
@@ -41,12 +42,21 @@ pub async fn get_access_token() -> String {
         panic!("Failed getting token response: {}", e)
     });
 
+    if token_response.is_empty() {
+        return String::new();
+    }
+
     let json: Result<SpotifyReturn, serde_json::Error> = serde_json::from_str(&token_response);
+    if json.is_err() {
+        warn!("Failed getting access token");
+        return String::new();
+    }
+
     let json = json.unwrap();
 
     if let Some(access_token) = json.access_token {
         return access_token;
     }
 
-    "".to_string()
+    String::new()
 }

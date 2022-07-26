@@ -156,7 +156,7 @@ async fn write_active_device(access_token: &str) -> bool {
 
     let result: Result<device::SpotifyDevice, serde_json::Error> = serde_json::from_str(&response);
     if result.is_err() {
-        error!("(write_active_device) Error parsing JSON: {}\nresonse:\n{}", result.unwrap_err(), response);
+        error!("(write_active_device) Error parsing JSON: {}\nReceived:\n{}", result.unwrap_err(), response);
     } else {
         let json: device::SpotifyDevice = serde_json::from_str(&response).unwrap();
 
