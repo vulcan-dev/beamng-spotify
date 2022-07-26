@@ -42,7 +42,11 @@ local function get_active_device()
     end
 
     local json = jsonDecode(body)
-    volume = imgui.IntPtr(json.device.volume_percent)
+    if json and json.device then
+        volume = imgui.IntPtr(json.device.volume_percent)
+    else
+        log("W", "get_active_device", "failed to get active device")
+    end
 
     return json
 end
