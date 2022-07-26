@@ -1,4 +1,5 @@
 client/target/
 client/Cargo.lock
+release/
 .env
 *.json
