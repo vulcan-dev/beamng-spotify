@@ -1,19 +1,24 @@
 local M = {}
 
 local http = require("socket.http")
-http.TIMEOUT = 0.01
-
-local connected = true
+http.TIMEOUT = 0.1
 
 local imgui = ui_imgui
 
+local connected = true
+local current_song = {}
+local active_device = {}
+
+local volume = imgui.IntPtr(0)
+
 local function get_song()
-    local url = "http://localhost:8888/api/v1/current_song"
-    local body = http.request(url)
+    local body = http.request("http://localhost:8888/api/v1/current_song")
 
     if not body then
         log("E", "get_song", "failed to get song, run \"spotify.reconnect() to try again\"")
         connected = false
+        current_song = {}
+        active_device = {}
         return nil
     end
 
@@ -21,15 +26,17 @@ local function get_song()
 end
 
 local function get_active_device()
-    local url = "http://localhost:8888/api/v1/active_device"
-    local body = http.request(url)
+    local body = http.request("http://localhost:8888/api/v1/active_device")
 
     if not body then
         log("E", "get_active_device", "failed to get active device")
         return nil
     end
 
-    return jsonDecode(body)
+    local json = jsonDecode(body)
+    volume = imgui.IntPtr(json.device.volume_percent)
+
+    return json
 end
 
 local function next_song()
@@ -65,7 +72,6 @@ local function pause_song()
 end
 
 local function seek(time_ms)
-    print("seek", time_ms)
     local url = "http://localhost:8888/api/v1/seek/" .. time_ms
     http.request {
         url = url,
@@ -79,7 +85,7 @@ local function set_volume(volume)
         return
     end
 
-    local url = "http://localhost:8888/api/v1/set_volume/" .. volume
+    local url = "http://localhost:8888/api/v1/volume/" .. tostring(volume)
     http.request {
         url = url,
         method = "POST",
@@ -87,9 +93,6 @@ local function set_volume(volume)
 end
 
 local lastUpdate = 0
-local current_song = {}
-local active_device = {}
-
 local function onUpdate()
     if not connected then return end
 
@@ -97,7 +100,7 @@ local function onUpdate()
     if os.clock() - lastUpdate > 0.1 then
         lastUpdate = now
         current_song = get_song()
-        -- active_device = get_active_device()
+        active_device = get_active_device()
     end
 
     if imgui.Begin("Spotify Controller") then
@@ -136,12 +139,11 @@ local function onUpdate()
         end
 
         -- volume
-        -- if active_device then
-        --     local volume = imgui.IntPtr(active_device.device.volume_percent)
-        --     if imgui.SliderInt("Volume", volume, 0, 100) then
-        --         set_volume(volume[0])
-        --     end
-        -- end
+        if active_device then
+            if imgui.SliderInt("Volume", volume, 0, 100) then
+                set_volume(volume[0])
+            end
+        end
 
         imgui.End()
     end
