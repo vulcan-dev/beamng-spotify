@@ -115,9 +115,9 @@ local function set_volume(volume)
     }
 end
 
-local lastUpdate = 0
-local volumeUpdate = 0
-local volumeChanged = false
+local last_update = 0
+local volume_update = 0
+local volume_changed = false
 
 local function onUpdate()
     if attempts >= max_attempts then
@@ -134,26 +134,26 @@ local function onUpdate()
     if not connected then return end
 
     local now = os.clock()
-    if os.clock() - lastUpdate > 0.1 then
-        lastUpdate = now
+    if os.clock() - last_update > 0.1 then
+        last_update = now
         current_song = get_song()
         active_device = get_active_device()
     end
 
-    if volumeChanged then
-        if os.clock() - volumeUpdate > 1.6 then
-            volumeUpdate = now
+    if volume_changed then
+        if os.clock() - volume_update > 1.6 then
+            volume_update = now
             if active_device and active_device.device then
                 volume = imgui.IntPtr(active_device.device.volume_percent)
             else
                 log("W", "get_active_device", "failed to get active device")
             end
 
-            volumeChanged = false
+            volume_changed = false
         end
     else
-        if os.clock() - volumeUpdate > 0.1 then
-            volumeUpdate = now
+        if os.clock() - volume_update > 0.1 then
+            volume_update = now
             if active_device and active_device.device then
                 volume = imgui.IntPtr(active_device.device.volume_percent)
             else
@@ -211,7 +211,7 @@ local function onUpdate()
         -- volume
         if active_device then
             if imgui.SliderInt("Volume", volume, 0, 100) then
-                volumeChanged = true
+                volume_changed = true
                 set_volume(volume[0])
             end
         end
