@@ -1,9 +1,9 @@
 use reqwest::{Client};
 use serde::{Deserialize};
 use std::fs::read_to_string;
-use log::warn;
+use log::{warn, error};
 
-#[derive(Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SpotifyReturn {
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
@@ -14,13 +14,8 @@ pub async fn get_access_token() -> String {
         return String::new();
     }
 
-    let client_id = dotenv::var("SPOTIFY_CLIENT_ID").unwrap_or_else(|_| {
-        panic!("SPOTIFY_CLIENT_ID must be set in .env file")
-    });
-
-    let client_secret = dotenv::var("SPOTIFY_CLIENT_SECRET").unwrap_or_else(|_| {
-        panic!("SPOTIFY_CLIENT_SECRET must be set in .env file")
-    });
+    let client_id = dotenv::var("SPOTIFY_CLIENT_ID").expect("SPOTIFY_CLIENT_ID not set in .env");
+    let client_secret = dotenv::var("SPOTIFY_CLIENT_SECRET").expect("SPOTIFY_CLIENT_SECRET not set in .env");
     
     let buff = String::from(format!("{}:{}", client_id, client_secret));
     let base64_buff = base64::encode(&buff);
@@ -48,7 +43,7 @@ pub async fn get_access_token() -> String {
 
     let json: Result<SpotifyReturn, serde_json::Error> = serde_json::from_str(&token_response);
     if json.is_err() {
-        warn!("Failed getting access token");
+        error!("Failed getting access token, invalid json: {}\nReponse: {}", json.unwrap_err().to_string(), token_response);
         return String::new();
     }
 

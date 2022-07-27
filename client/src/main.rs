@@ -23,11 +23,9 @@ pub struct AuthRequest {
 
 #[get("/login")]
 async fn login() -> impl Responder {
-    let scope = String::from("user-read-currently-playing user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-playback-state user-library-read user-modify-playback-state");
+    let scope = String::from("user-read-currently-playing user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-playback-state user-library-read user-modify-playback-state user-top-read");
     let redirect_uri = String::from("http://localhost:8888/api/v1/callback");
-    let client_id = dotenv::var("SPOTIFY_CLIENT_ID").unwrap_or_else(|_| {
-        panic!("SPOTIFY_CLIENT_ID must be set in .env file")
-    });
+    let client_id = dotenv::var("SPOTIFY_CLIENT_ID").expect("SPOTIFY_CLIENT_ID not set in .env");
 
     let redirect_url = format!("https://accounts.spotify.com/authorize?response_type=code&client_id={}&scope={}&redirect_uri={}", client_id, scope, redirect_uri);
     HttpResponse::Found().append_header(("Location", redirect_url)).finish()
@@ -37,13 +35,8 @@ async fn login() -> impl Responder {
 async fn callback(info: web::Query<AuthRequest>) -> impl Responder {
     let code = info.code.clone();
 
-    let client_id = dotenv::var("SPOTIFY_CLIENT_ID").unwrap_or_else(|_| {
-        panic!("SPOTIFY_CLIENT_ID must be set in .env file")
-    });
-
-    let client_secret = dotenv::var("SPOTIFY_CLIENT_SECRET").unwrap_or_else(|_| {
-        panic!("SPOTIFY_CLIENT_SECRET must be set in .env file")
-    });
+    let client_id = dotenv::var("SPOTIFY_CLIENT_ID").expect("SPOTIFY_CLIENT_ID not set in .env");
+    let client_secret = dotenv::var("SPOTIFY_CLIENT_SECRET").expect("SPOTIFY_CLIENT_SECRET not set in .env");
     
     let buff = String::from(format!("{}:{}", client_id, client_secret));
     let base64_buff = base64::encode(&buff);
@@ -107,28 +100,17 @@ async fn write_active_song(access_token: &str) {
                 panic!("Error opening song.json: {}", e.to_string())
             });
 
-            file.write_all(serde_json::to_string(&json).unwrap().as_bytes()).unwrap_or_else(|e| {
-                panic!("Error writing to song.json: {}", e.to_string())
-            });
+            file.write_all(serde_json::to_string(&json).unwrap().as_bytes()).expect("Error writing to song.json");
         } else {
-            let file_str = read_to_string("song.json").unwrap_or_else(|e| {
-                panic!("Error reading song.json: {}", e.to_string())
-            });
-
-            let file_json: song::Song = serde_json::from_str(&file_str).unwrap_or_else(|e| {
-                panic!("Error parsing song.json: {}", e.to_string());
-            });
+            let file_str = read_to_string("song.json").expect("Error reading song.json");
+            let file_json: song::Song = serde_json::from_str(&file_str).expect("Error parsing song.json");
 
             if json.progress_ms != file_json.progress_ms || json.is_playing != file_json.is_playing {
                 let mut file = File::create("song.json").unwrap_or_else(|e| {
                     panic!("Error opening song.json: {}", e.to_string())
                 });
 
-                file.write_all(serde_json::to_string(&json).unwrap_or_else(|e| {
-                    panic!("Error writing to song.json: {}", e.to_string())
-                }).as_bytes()).unwrap_or_else(|e| {
-                    panic!("Error writing to song.json: {}", e.to_string())
-                });
+                file.write_all(serde_json::to_string(&json).expect("Error writing to song.json").as_bytes()).expect("Error writing to song.json");
 
                 if let (Some(item1), Some(item2)) = (json.clone().item, file_json.clone().item) {
                     if item1.name != item2.name {
@@ -194,14 +176,8 @@ Steps:
         std::process::exit(0);
     }
 
-    // check if the values are empty
-    let client_id = dotenv::var("SPOTIFY_CLIENT_ID").unwrap_or_else(|_| {
-        panic!("SPOTIFY_CLIENT_ID must be set in .env file")
-    });
-
-    let client_secret = dotenv::var("SPOTIFY_CLIENT_SECRET").unwrap_or_else(|_| {
-        panic!("SPOTIFY_CLIENT_SECRET must be set in .env file")
-    });
+    let client_id = dotenv::var("SPOTIFY_CLIENT_ID").expect("SPOTIFY_CLIENT_ID not set in .env");
+    let client_secret = dotenv::var("SPOTIFY_CLIENT_SECRET").expect("SPOTIFY_CLIENT_SECRET not set in .env");
 
     if client_id.is_empty() || client_secret.is_empty() {
         error!("SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET must be set in .env file");
@@ -217,19 +193,16 @@ Steps:
 
     let _ = tokio::spawn(async {
         let mut device_offline = true;
-        let mut first_run = true;
 
-        loop {
-            let access_token = client::get_access_token().await;
-            if access_token.is_empty() {
-                return;
-            }
+        let access_token = client::get_access_token().await;
+        if access_token.is_empty() {
+            error!("Error getting access token, please make sure your .env file is correct.");
+            std::process::exit(1);
+        }
 
-            if first_run {
-                info!("Access token: {}", access_token);
-                first_run = false;
-            }
-        
+        info!("Access token: {}", access_token);
+
+        loop {        
             write_active_song(&access_token).await;
             let new_online = write_active_device(&access_token).await;
             if !device_offline && !new_online {
@@ -259,6 +232,7 @@ Steps:
             .service(spotify::playlists)
             .service(spotify::playlist_tracks)
             .service(spotify::albums)
+            .service(spotify::top_tracks)
     }).workers(2).bind("localhost:8888").unwrap_or_else(|e| {
         panic!("Failed to bind to localhost:8888: {}", e.to_string())
     }).run().await.unwrap_or_else(|e| {

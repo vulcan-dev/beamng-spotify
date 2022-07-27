@@ -236,6 +236,25 @@ async fn albums() -> impl Responder {
     HttpResponse::Ok().body(response.text().await.unwrap())
 }
 
+#[get("/api/v1/top_tracks")]
+async fn top_tracks() -> impl Responder {
+    let access_token = client::get_access_token().await;
+    if access_token.is_empty() {
+        return HttpResponse::Ok().body("No access token");
+    }
+
+    let client = Client::builder()
+        .user_agent("BeamNG-Spotify")
+        .build().unwrap();
+
+    let response = client
+        .get("https://api.spotify.com/v1/me/top/tracks")
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send().await.unwrap();
+
+    HttpResponse::Ok().body(response.text().await.unwrap())
+}
+
 #[get("/api/v1/active_device")]
 async fn active_device() -> impl Responder {
     if let Some(active_device) = read_to_string("active_device.json").ok() {

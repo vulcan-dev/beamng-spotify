@@ -11,6 +11,7 @@ local current_song = {}
 local active_device = {}
 local playlists = {}
 local tracks = {}
+local top_songs = {}
 local active_playlist = nil
 
 local volume = imgui.IntPtr(0)
@@ -74,9 +75,6 @@ local function play_song(id, uris, pos)
         })
     else
         body = jsonEncode({
-            offset = {
-                position = 0
-            },
             position_ms = 0
         })
     end
@@ -119,6 +117,23 @@ end
 local function get_tracks(playlist_id)
     http.TIMEOUT = 5 -- I know, it's a lot.
     local body = http.request("http://localhost:8888/api/v1/playlists/" .. playlist_id .. "/tracks")
+    http.TIMEOUT = 0.1
+
+    if not body then
+        attempts = attempts + 1
+        return nil
+    else
+        connected = true
+        old_connected = true
+        attempts = 0
+    end
+
+    return jsonDecode(body)
+end
+
+local function get_top_songs()
+    http.TIMEOUT = 5 -- I know, it's a lot.
+    local body = http.request("http://localhost:8888/api/v1/top_tracks")
     http.TIMEOUT = 0.1
 
     if not body then
@@ -195,6 +210,35 @@ local function draw_playlist()
         end
     end
 end
+
+local function draw_top()
+    for i, song in pairs(top_songs) do
+        local name = song.name
+        local id = song.id
+
+        if current_song and current_song.item and id == current_song.item.id then
+            imgui.PushStyleColor2(imgui.Col_Button, imgui.ImVec4(0.5, 0.5, 0.5, 1))
+            pushed = true
+        end
+
+        if imgui.Button(name, imgui.ImVec2(imgui.GetWindowWidth(), 24)) then
+            local all_top_songs = {}
+            for _, song in pairs(top_songs) do
+                table.insert(all_top_songs, "spotify:track:" .. song.id)
+            end
+
+            play_song(id, all_top_songs, i-1)
+        end
+
+        if pushed then
+            imgui.PopStyleColor()
+            pushed = false
+        end
+    end
+end
+
+local show_top = false
+local can_pop = false
 
 local function onUpdate()
     if attempts >= max_attempts then
@@ -302,22 +346,41 @@ local function onUpdate()
 
         if playlists then
             if imgui.BeginChild1("Playlists", imgui.ImVec2(window_width / 2, window_height - 165), true) then
+                if show_top then
+                    can_pop = true
+                    imgui.PushStyleColor2(imgui.Col_Button, imgui.ImVec4(0.5, 0.5, 0.5, 1))
+                end
+
+                if imgui.Button("Top Tracks", imgui.ImVec2(window_width / 2, 24)) then
+                    show_top = not show_top
+                    if show_top then
+                        active_playlist = nil
+                    end
+                end
+
+                if can_pop then
+                    imgui.PopStyleColor()
+                    can_pop = false
+                end
+
                 for _, playlist in pairs(playlists.items) do
-                    -- if playlist.name ~= "" then
+                    if playlist.name ~= "" then
                         local id = playlist.id
 
                         if active_playlist == id then
                             imgui.PushStyleColor2(imgui.Col_Button, imgui.ImVec4(0.5, 0.5, 0.5, 1))
                             if imgui.Button(playlist.name, imgui.ImVec2(window_width / 2, 24)) then
                                 active_playlist = nil
+                                show_top = false
                             end
                             imgui.PopStyleColor()
                         else
                             if imgui.Button(playlist.name, imgui.ImVec2(window_width / 2, 24)) then
                                 active_playlist = playlist.id
+                                show_top = false
                             end
                         end
-                    -- end
+                    end
                 end
 
                 imgui.EndChild()
@@ -325,7 +388,11 @@ local function onUpdate()
 
             imgui.SameLine()
             if imgui.BeginChild1("Playlist", imgui.ImVec2(imgui.GetWindowWidth() / 2, window_height - 165), true) then
-                draw_playlist()
+                if show_top then
+                    draw_top()
+                else
+                    draw_playlist()
+                end
                 imgui.EndChild()
             end
         end
@@ -349,6 +416,8 @@ local function onExtensionLoaded()
     for _, playlist in pairs(playlists.items) do
         tracks[playlist.id] = get_tracks(playlist.id)
     end
+
+    top_songs = get_top_songs().items
 end
 
 M.onExtensionLoaded = onExtensionLoaded
