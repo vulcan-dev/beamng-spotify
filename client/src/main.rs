@@ -23,7 +23,7 @@ pub struct AuthRequest {
 
 #[get("/login")]
 async fn login() -> impl Responder {
-    let scope = String::from("user-read-currently-playing user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-playback-state user-library-read");
+    let scope = String::from("user-read-currently-playing user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-playback-state user-library-read user-modify-playback-state");
     let redirect_uri = String::from("http://localhost:8888/api/v1/callback");
     let client_id = dotenv::var("SPOTIFY_CLIENT_ID").unwrap_or_else(|_| {
         panic!("SPOTIFY_CLIENT_ID must be set in .env file")
@@ -217,11 +217,17 @@ Steps:
 
     let _ = tokio::spawn(async {
         let mut device_offline = true;
+        let mut first_run = true;
 
         loop {
             let access_token = client::get_access_token().await;
             if access_token.is_empty() {
                 return;
+            }
+
+            if first_run {
+                info!("Access token: {}", access_token);
+                first_run = false;
             }
         
             write_active_song(&access_token).await;
@@ -251,8 +257,8 @@ Steps:
             .service(spotify::volume)
             .service(spotify::active_device)
             .service(spotify::playlists)
+            .service(spotify::playlist_tracks)
             .service(spotify::albums)
-            .service(spotify::tracks)
     }).workers(2).bind("localhost:8888").unwrap_or_else(|e| {
         panic!("Failed to bind to localhost:8888: {}", e.to_string())
     }).run().await.unwrap_or_else(|e| {

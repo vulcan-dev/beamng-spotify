@@ -9,6 +9,9 @@ local connected = true
 local old_connected = true
 local current_song = {}
 local active_device = {}
+local playlists = {}
+local tracks = {}
+local active_playlist = nil
 
 local volume = imgui.IntPtr(0)
 local attempts = 0
@@ -60,13 +63,23 @@ local function previous_song()
     }
 end
 
-local function play_song()
-    local body = jsonEncode({
-        offset = {
-            position = 0
-        },
-        position_ms = 0
-    })
+local function play_song(id, uris, pos)
+    local body = ""
+    if id then
+        body = jsonEncode({
+            uris = uris,
+            offset = {
+                position = pos
+            },
+        })
+    else
+        body = jsonEncode({
+            offset = {
+                position = 0
+            },
+            position_ms = 0
+        })
+    end
 
     local url = "http://localhost:8888/api/v1/play_song"
     local respbody = {}
@@ -84,6 +97,40 @@ local function play_song()
         },
         sink = ltn12.sink.table(respbody),
     }
+end
+
+local function get_playlists()
+    http.TIMEOUT = 5 -- I know, it's a lot.
+    local body = http.request("http://localhost:8888/api/v1/playlists")
+    http.TIMEOUT = 0.1
+
+    if not body then
+        attempts = attempts + 1
+        return nil
+    else
+        connected = true
+        old_connected = true
+        attempts = 0
+    end
+
+    return jsonDecode(body)
+end
+
+local function get_tracks(playlist_id)
+    http.TIMEOUT = 5 -- I know, it's a lot.
+    local body = http.request("http://localhost:8888/api/v1/playlists/" .. playlist_id .. "/tracks")
+    http.TIMEOUT = 0.1
+
+    if not body then
+        attempts = attempts + 1
+        return nil
+    else
+        connected = true
+        old_connected = true
+        attempts = 0
+    end
+
+    return jsonDecode(body)
 end
 
 local function pause_song()
@@ -118,6 +165,36 @@ end
 local last_update = 0
 local volume_update = 0
 local volume_changed = false
+local pushed = false
+
+local function draw_playlist()
+    if not active_playlist then return end
+
+    local playlist_tracks = tracks[active_playlist]
+    for i, track in pairs(playlist_tracks.items) do
+        local song_name = track.track.name
+        local song_id = track.track.id
+
+        if current_song and current_song.item and song_id == current_song.item.id then
+            imgui.PushStyleColor2(imgui.Col_Button, imgui.ImVec4(0.5, 0.5, 0.5, 1))
+            pushed = true
+        end
+
+        if imgui.Button(song_name, imgui.ImVec2(imgui.GetWindowWidth(), 24)) then
+            local all_songs_in_playlist = {}
+            for _, song in pairs(playlist_tracks.items) do
+                table.insert(all_songs_in_playlist, "spotify:track:" .. song.track.id)
+            end
+
+            play_song(track.track.id, all_songs_in_playlist, i-1)
+        end
+
+        if pushed then
+            imgui.PopStyleColor()
+            pushed = false
+        end
+    end
+end
 
 local function onUpdate()
     if attempts >= max_attempts then
@@ -169,50 +246,87 @@ local function onUpdate()
             return
         end
 
-        local song_name = song.item.name or "None"
+        local window_width = imgui.GetWindowWidth()
+        local window_height = imgui.GetWindowHeight()
 
-        imgui.Text("Song: " .. song_name)
+        if imgui.BeginChild1("Song Info", imgui.ImVec2(window_width, 128), true) then
+            local song_name = song.item.name or "None"
 
-        if imgui.Button("Previous") then
-            previous_song()
-        end
-        imgui.SameLine()
-        if imgui.Button("Next") then
-            next_song()
-        end
+            imgui.Text("Song: " .. song_name)
 
-        -- progress bar
-        local time_minutes = math.floor(song.progress_ms / 60000)
-        local time_seconds = math.floor((song.progress_ms % 60000) / 1000)
-        local time_str = string.format("%02d:%02d", time_minutes, time_seconds)
-        local time_ms = song.progress_ms
-        local duration_ms = song.item.duration_ms
-        local progress = time_ms / duration_ms
-        imgui.ProgressBar(progress, imgui.ImVec2(0.0, 0.0), time_str)
-        if imgui.IsItemHovered() and imgui.IsMouseDown(0) then
-            local mouse_x = imgui.GetMousePos().x
-            local progress_x = imgui.GetItemRectMin().x
-            local progress_width = imgui.GetItemRectSize().x
-            local time_ms = math.floor((mouse_x - progress_x) / progress_width * duration_ms)
-            seek(time_ms)
-        end
-
-        imgui.SameLine()
-        if song.is_playing then
-            if imgui.Button("Pause") then
-                pause_song()
+            if imgui.Button("Previous") then
+                previous_song()
             end
-        else
-            if imgui.Button("Play") then
-                play_song()
+            imgui.SameLine()
+            if imgui.Button("Next") then
+                next_song()
             end
+
+            -- progress bar
+            local time_minutes = math.floor(song.progress_ms / 60000)
+            local time_seconds = math.floor((song.progress_ms % 60000) / 1000)
+            local time_str = string.format("%02d:%02d", time_minutes, time_seconds)
+            local time_ms = song.progress_ms
+            local duration_ms = song.item.duration_ms
+            local progress = time_ms / duration_ms
+            imgui.ProgressBar(progress, imgui.ImVec2(0.0, 0.0), time_str)
+            if imgui.IsItemHovered() and imgui.IsMouseDown(0) then
+                local mouse_x = imgui.GetMousePos().x
+                local progress_x = imgui.GetItemRectMin().x
+                local progress_width = imgui.GetItemRectSize().x
+                local time_ms = math.floor((mouse_x - progress_x) / progress_width * duration_ms)
+                seek(time_ms)
+            end
+
+            imgui.SameLine()
+            if song.is_playing then
+                if imgui.Button("Pause") then
+                    pause_song()
+                end
+            else
+                if imgui.Button("Play") then
+                    play_song()
+                end
+            end
+
+            -- volume
+            if active_device then
+                if imgui.SliderInt("Volume", volume, 0, 100) then
+                    volume_changed = true
+                    set_volume(volume[0])
+                end
+            end
+
+            imgui.EndChild()
         end
 
-        -- volume
-        if active_device then
-            if imgui.SliderInt("Volume", volume, 0, 100) then
-                volume_changed = true
-                set_volume(volume[0])
+        if playlists then
+            if imgui.BeginChild1("Playlists", imgui.ImVec2(window_width / 2, window_height - 165), true) then
+                for _, playlist in pairs(playlists.items) do
+                    -- if playlist.name ~= "" then
+                        local id = playlist.id
+
+                        if active_playlist == id then
+                            imgui.PushStyleColor2(imgui.Col_Button, imgui.ImVec4(0.5, 0.5, 0.5, 1))
+                            if imgui.Button(playlist.name, imgui.ImVec2(window_width / 2, 24)) then
+                                active_playlist = nil
+                            end
+                            imgui.PopStyleColor()
+                        else
+                            if imgui.Button(playlist.name, imgui.ImVec2(window_width / 2, 24)) then
+                                active_playlist = playlist.id
+                            end
+                        end
+                    -- end
+                end
+
+                imgui.EndChild()
+            end
+
+            imgui.SameLine()
+            if imgui.BeginChild1("Playlist", imgui.ImVec2(imgui.GetWindowWidth() / 2, window_height - 165), true) then
+                draw_playlist()
+                imgui.EndChild()
             end
         end
 
@@ -230,9 +344,21 @@ local function is_connected()
     return connected
 end
 
+local function onExtensionLoaded()
+    playlists = get_playlists()
+    for _, playlist in pairs(playlists.items) do
+        tracks[playlist.id] = get_tracks(playlist.id)
+    end
+end
+
+M.onExtensionLoaded = onExtensionLoaded
 M.onUpdate = onUpdate
+
 M.reconnect = reconnect
 M.is_connected = is_connected
+
+M.get_playlists = get_playlists
+M.get_tracks = get_tracks
 
 M.get_song = get_song
 M.get_active_device = get_active_device

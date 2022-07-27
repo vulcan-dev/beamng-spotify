@@ -13,9 +13,10 @@ pub struct SpotifyOffset {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SpotifyPlay {
+    pub uris: Option<Vec<String>>,
     pub context_uri: Option<String>,
-    pub offset: SpotifyOffset,
-    pub position_ms: u32
+    pub offset: Option<SpotifyOffset>,
+    pub position_ms: Option<u32>
 }
 
 #[get("/api/v1/current_song")]
@@ -77,11 +78,14 @@ async fn play(body: web::Json<SpotifyPlay>) -> impl Responder {
         .user_agent("BeamNG-Spotify")
         .build().unwrap();
 
+    let json = serde_json::to_string(&body).unwrap();
+
     client
         .put("https://api.spotify.com/v1/me/player/play")
         .header("Authorization", format!("Bearer {}", access_token))
-        .header("Content-Length", "0")
-        .body(serde_json::to_string(&body).unwrap())
+        .header("Content-Type", "application/json")
+        .header("Content-Length", format!("{}", json.len()))
+        .body(json)
         .send().await.unwrap().text().await.unwrap();
 
     HttpResponse::Ok().finish()
@@ -193,6 +197,25 @@ async fn playlists() -> impl Responder {
 
     HttpResponse::Ok().body(response.text().await.unwrap())
 }
+// todo: make a new thread for playlist and tracks, update every 30 seconds.
+#[get("/api/v1/playlists/{playlist_id}/tracks")]
+async fn playlist_tracks(playlist_id: web::Path<String>) -> impl Responder {
+    let access_token = client::get_access_token().await;
+    if access_token.is_empty() {
+        return HttpResponse::Ok().body("No access token");
+    }
+
+    let client = Client::builder()
+        .user_agent("BeamNG-Spotify")
+        .build().unwrap();
+
+    let response = client
+        .get(format!("https://api.spotify.com/v1/playlists/{}/tracks", playlist_id))
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send().await.unwrap();
+
+    HttpResponse::Ok().body(response.text().await.unwrap())
+}
 
 #[get("/api/v1/albums")]
 async fn albums() -> impl Responder {
@@ -207,25 +230,6 @@ async fn albums() -> impl Responder {
 
     let response = client
         .get("https://api.spotify.com/v1/me/albums")
-        .header("Authorization", format!("Bearer {}", access_token))
-        .send().await.unwrap();
-
-    HttpResponse::Ok().body(response.text().await.unwrap())
-}
-
-#[get("/api/v1/tracks")]
-async fn tracks() -> impl Responder {
-    let access_token = client::get_access_token().await;
-    if access_token.is_empty() {
-        return HttpResponse::Ok().body("No access token");
-    }
-
-    let client = Client::builder()
-        .user_agent("BeamNG-Spotify")
-        .build().unwrap();
-
-    let response = client
-        .get("https://api.spotify.com/v1/me/tracks")
         .header("Authorization", format!("Bearer {}", access_token))
         .send().await.unwrap();
 
